@@ -140,24 +140,24 @@ fun addEmployee() {
 }
 
 fun main() {
-    println("🕒 Employee Check-In System")
+    println("Employee Checkin System")
     println("Type 'exit' to quit | 'add' to add employee\n")
     while (true) {
-        print("Enter Employee ID to check in or command: ")
+        print("Enter Employee ID to check in : ")
         val input = readln().trim()
         when {
             input.equals("exit", ignoreCase = true) -> {
-                println("👋 Exiting... Have a great day!")
+                println("👋 Exiting checkin... Have a great day!")
                 break
             }
             input.equals("add", ignoreCase = true) -> addEmployee()
             else -> {
                 val employee = findEmployee(input)
                 if (employee == null) {
-                    println("❌ Invalid Employee ID!")
+                    println("❌ Invalid employee ID!")
                     continue
                 }
-                print("Enter check-in date and time (yyyy-MM-dd HH:mm) or press Enter to use current: ")
+                print("Enter check-in date and time (yyyy-MM-dd HH:mm) or press Enter to use current date and time: ")
                 val dtInput = readln()
                 val dateTime = parseDateTime(dtInput)
                 if (dateTime == null) {
