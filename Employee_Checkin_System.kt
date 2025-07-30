@@ -1,7 +1,6 @@
 package org.example
 
-import java.time.LocalDate
-import java.time.LocalTime
+import java.time.*
 import java.time.format.DateTimeFormatter
 import java.time.format.DateTimeParseException
 
@@ -13,16 +12,20 @@ data class EmployeeDetails(
     val department: String,
     val reportingTo: String
 )
+
 data class AttendanceEntry(
     val employeeId: String,
     val checkinDate: LocalDate,
-    val checkinTime: LocalTime
+    val checkinTime: LocalTime,
+    var checkoutDateTime: LocalDateTime? = null
 )
+
 val employeeDatabase = mutableListOf(
     EmployeeDetails("E001", "John", "Doe", "Developer", "IT", "E010"),
     EmployeeDetails("E002", "Jane", "Smith", "Manager", "HR", "E015"),
     EmployeeDetails("E003", "David", "Johnson", "Analyst", "Finance", "E002")
 )
+
 val attendanceList = mutableListOf<AttendanceEntry>()
 
 fun generateEmployeeId(): String {
@@ -33,17 +36,47 @@ fun generateEmployeeId(): String {
 fun findEmployee(employeeId: String) = employeeDatabase.find { it.employeeId == employeeId }
 
 fun isAlreadyCheckedIn(employeeId: String, date: LocalDate) =
-    attendanceList.any { it.employeeId == employeeId && it.checkinDate == date }
+    attendanceList.find { it.employeeId == employeeId && it.checkinDate == date }
 
-fun recordCheckIn(employeeId: String, date: LocalDate, time: LocalTime) =
+fun checkInEmployee(employeeId: String, date: LocalDate, time: LocalTime): String {
+    val employee = findEmployee(employeeId)
+        ?: return "❌ Invalid Employee ID!"
+
+    if (isAlreadyCheckedIn(employeeId, date) != null) {
+        return "⚠️ You've already checked in for $date!"
+    }
+
     attendanceList.add(AttendanceEntry(employeeId, date, time))
+    val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
+    return "✅ Check-in successful for ${employee.firstName} at $formattedTime on $date"
+}
+
+fun checkoutEmployee(employeeId: String, checkoutTime: LocalDateTime): String {
+    if (findEmployee(employeeId) == null) {
+        return "❌ Invalid Employee ID!"
+    }
+
+    val attendance = isAlreadyCheckedIn(employeeId, checkoutTime.toLocalDate())
+        ?: return "❌ No check-in record found for today."
+
+    if (attendance.checkoutDateTime != null) {
+        return "⚠️ Already checked out at ${attendance.checkoutDateTime}"
+    }
+
+    val checkInDateTime = LocalDateTime.of(attendance.checkinDate, attendance.checkinTime)
+    val duration = Duration.between(checkInDateTime, checkoutTime)
+
+    attendance.checkoutDateTime = checkoutTime
+
+    return "✅ Checkout successful at $checkoutTime | Working hours: ${duration.toHours()}h ${duration.toMinutes() % 60}m"
+}
 
 fun parseDateTime(input: String?): Pair<LocalDate, LocalTime>? {
     val today = LocalDate.now()
 
     if (input.isNullOrBlank()) {
-        val nowTime = LocalTime.now().withSecond(0).withNano(0)
-        return today to nowTime
+        val now = LocalTime.now().withSecond(0).withNano(0)
+        return today to now
     }
 
     val parts = input.trim().split(" ")
@@ -52,14 +85,12 @@ fun parseDateTime(input: String?): Pair<LocalDate, LocalTime>? {
         return null
     }
 
-    val (datePart, timePart) = parts
-
     return try {
-        val date = LocalDate.parse(datePart)
-        val time = LocalTime.parse(timePart).withSecond(0).withNano(0)
+        val date = LocalDate.parse(parts[0])
+        val time = LocalTime.parse(parts[1]).withSecond(0).withNano(0)
 
         if (date != today) {
-            println("❌ You can only check in for today's date, not $date.")
+            println("❌ You can only check in/out for today's date.")
             null
         } else {
             date to time
@@ -70,27 +101,12 @@ fun parseDateTime(input: String?): Pair<LocalDate, LocalTime>? {
     }
 }
 
-fun checkInEmployee(employeeId: String, date: LocalDate, time: LocalTime) {
-    val employee = findEmployee(employeeId)
-    if (employee == null) {
-        println("❌ Invalid Employee ID!")
-        return
-    }
-    if (isAlreadyCheckedIn(employeeId, date)) {
-        println("⚠️ You've already logged in for $date!")
-        return
-    }
-
-    recordCheckIn(employeeId, date, time)
-    val formattedTime = time.format(DateTimeFormatter.ofPattern("HH:mm"))
-    println("✅ Check-in successful for ${employee.firstName} at $formattedTime on $date")
-}
-
 fun addEmployee() {
     println("\n📋 Add New Employee:")
     fun isValidName(name: String): Boolean = name.length >= 3 && name.all { it.isLetter() }
     fun isValidRoleOrDept(input: String): Boolean = input.length >= 2 && input.all { it.isLetter() }
     val empIdRegex = Regex("^E\\d{3}$")
+
     var firstName: String
     while (true) {
         print("Enter First Name: ")
@@ -98,6 +114,7 @@ fun addEmployee() {
         if (isValidName(firstName)) break
         println("❌ First Name must be at least 3 letters and alphabetic only!")
     }
+
     var lastName: String
     while (true) {
         print("Enter Last Name: ")
@@ -105,6 +122,7 @@ fun addEmployee() {
         if (isValidName(lastName)) break
         println("❌ Last Name must be at least 3 letters and alphabetic only!")
     }
+
     var role: String
     while (true) {
         print("Enter Role: ")
@@ -112,6 +130,7 @@ fun addEmployee() {
         if (isValidRoleOrDept(role)) break
         println("❌ Role must be at least 2 letters and alphabetic only!")
     }
+
     var department: String
     while (true) {
         print("Enter Department: ")
@@ -119,6 +138,7 @@ fun addEmployee() {
         if (isValidRoleOrDept(department)) break
         println("❌ Department must be at least 2 letters and alphabetic only!")
     }
+
     var reportingTo: String
     while (true) {
         print("Enter Reporting To (Manager ID): ")
@@ -126,7 +146,9 @@ fun addEmployee() {
         if (empIdRegex.matches(reportingTo)) break
         println("❌ Invalid format! Employee ID should be like E001, E015, etc.")
     }
+
     val newId = generateEmployeeId()
+
     employeeDatabase.add(
         EmployeeDetails(
             employeeId = newId,
@@ -134,38 +156,74 @@ fun addEmployee() {
             lastName = lastName,
             role = role,
             department = department,
-            reportingTo = reportingTo )
+            reportingTo = reportingTo
+        )
     )
+
     println("✅ Employee $firstName $lastName added successfully with ID: $newId\n")
 }
-
 fun main() {
-    println("Employee Checkin System")
-    println("Type 'exit' to quit | 'add' to add employee\n")
+    println("🔐 Employee Checkin System")
+
     while (true) {
-        print("Enter Employee ID to check in : ")
-        val input = readln().trim()
-        when {
-            input.equals("exit", ignoreCase = true) -> {
-                println("👋 Exiting checkin... Have a great day!")
-                break
-            }
-            input.equals("add", ignoreCase = true) -> addEmployee()
-            else -> {
-                val employee = findEmployee(input)
+        println("\n📋 Menu:")
+        println("1. Add New Employee")
+        println("2. Check-In")
+        println("3. Check-Out")
+        println("4. Exit")
+
+        print("Enter your choice (1-4): ")
+        val choice = readln().trim()
+
+        when (choice) {
+            "1" -> addEmployee()
+
+            "2" -> {
+                print("Enter Employee ID for check-in: ")
+                val empId = readln().trim()
+
+                val employee = findEmployee(empId)
                 if (employee == null) {
-                    println("❌ Invalid employee ID!")
+                    println("❌ Invalid Employee ID!")
                     continue
                 }
-                print("Enter check-in date and time (yyyy-MM-dd HH:mm) or press Enter to use current date and time: ")
+
+                print("Enter check-in date and time (yyyy-MM-dd HH:mm) or press Enter for current date and time: ")
                 val dtInput = readln()
                 val dateTime = parseDateTime(dtInput)
-                if (dateTime == null) {
+                if (dateTime != null) {
+                    val (date, time) = dateTime
+                    println(checkInEmployee(empId, date, time))
+                }
+            }
+
+            "3" -> {
+                print("Enter Employee ID for checkout: ")
+                val empId = readln().trim()
+
+                val employee = findEmployee(empId)
+                if (employee == null) {
+                    println("❌ Invalid Employee ID!")
                     continue
                 }
-                val (date, time) = dateTime
-                checkInEmployee(input, date, time)
-                println()
+
+                print("Enter checkout date and time (yyyy-MM-dd HH:mm) or press Enter for current date and time: ")
+                val dtInput = readln()
+                val dateTime = parseDateTime(dtInput)
+                if (dateTime != null) {
+                    val (date, time) = dateTime
+                    val checkoutTime = LocalDateTime.of(date, time)
+                    println(checkoutEmployee(empId, checkoutTime))
+                }
+            }
+
+            "4" -> {
+                println("👋 Exiting system... Have a great day!")
+                break
+            }
+
+            else -> {
+                println("❌ Invalid choice! Please enter 1, 2, 3, or 4.")
             }
         }
     }
